@@ -1,0 +1,112 @@
+#清空环境变量
+rm(list = ls())
+
+#安装包
+install.packages("caret")
+install.packages("car")
+
+#加载包
+library('tidyverse') 
+library('caret') 
+library('ade4') 
+library('car') 
+
+#加载doubs数据
+data('doubs')
+
+#计算doubs数据中每行鱼的总数
+total_fish = rowSums(doubs$fish) 
+print(total_fish)
+
+#将total_fish和env数据框结合在一起
+env_fish = cbind(doubs$env, total_fish)
+
+print(env_fish)
+
+#加载ggplot2安装包
+library(ggplot2)
+par(mfrow=c(4,3))
+
+#用feature plot函数查看不同环境变量和鱼丰富度之间是否存在线性关系
+featurePlot(x=env_fish[, -12],
+            y=env_fish[, 12],
+            plot = "scatter",
+            type=c("p","smooth"),
+            layout=c(3,4))
+#'flo','dfs'，‘alt','slo'与‘total_fish’之间存在线性关系
+
+#删除鱼数量为0的列
+env_fish<-subset(env_fish,total_fish!=0)
+
+# 检测离群值的阈值
+threshold <- 3
+
+# 检测并删除包含离群值的任何列的所有行
+for (col in colnames(env_fish)) {
+  if (is.numeric(env_fish[[col]])) {  # 只对数值类型的列进行处理
+    z_scores <- abs((env_fish[[col]] - mean(env_fish[[col]])) / sd(env_fish[[col]]))  # 计算z-score
+    env_fish <- env_fish[(z_scores < threshold), ]  # 保留z-score小于阈值的行
+  }
+}
+
+# 显示删除离群值后的数据框
+print(env_fish)
+
+# 检测近零方差的环境变量
+near_zero_var <- nearZeroVar(env_fish)  # 使用nearZeroVar函数检测近零方差的变量
+
+# 显示近零方差的环境变量
+print(near_zero_var)  # 排除近零方差的变量
+
+# 无近零方差的环境变量
+
+# 计算环境变量之间的相关系数矩阵
+cor_matrix <- cor(env_fish[, -1])  # 排除第一列（目标变量）后计算相关系数矩阵
+
+# 检测高度相关的特征
+highly_correlated <- findCorrelation(cor_matrix, cutoff = 0.75)  # 使用findCorrelation函数检测高度相关的特征
+env_fish <- env_fish[, -highly_correlated]  # 排除高度相关的特征
+
+# 显示处理后的数据框
+print(env_fish)
+
+# 加载包
+library(caret)
+library("randomForest")
+
+# 划分训练集和测试集
+set.seed(129)  # 设置随机种子以保证结果的可复现性
+train_idx<-createDataPartition(env_fish$total_fish,p=0.8,list = F)
+train<-env_fish[train_idx,]
+test<-env_fish[-train_idx,]
+
+#可视化选择重要的变量/特征
+x<-as.matrix(env_fish[ ,1:6])
+y<-as.factor(env_fish$total_fish)
+featurePlot(x,y,plot="box",
+            strip=strip.custom(par.strip.text=list(cex=.5)),
+            scales=list(x=list(relation="free"),y=list(relation="free")))
+
+#优化模型参数
+trControl<-trainControl(
+  method = "cv",number = 10,repeats = 10)
+
+#使用决策树建模
+set.seed(5893)
+model1<-train(total_fish ~ .,
+            data = train,
+            method="rf",
+            trControl = trControl,
+            metric="RMSE",
+            verbose = FALSE)
+
+ggplot(model1)
+
+# 对测试集进行预测
+predictions <- predict(model1, newdata = test)
+
+# 绘制预测值与实际值的散点图
+ggplot() +
+  geom_point(aes(x = predictions, y = test$total_fish)) +
+  labs(x = "Predicted Total Fish Abundance", y = "Actual Total Fish Abundance") +
+  ggtitle("Scatter plot of Predicted vs. Actual Total Fish Abundance")
