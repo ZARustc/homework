@@ -1,0 +1,100 @@
+#清空环境变量
+rm(list = ls())
+
+#加载包
+library('tidyverse') 
+library('caret') 
+library('ade4') 
+library('car') 
+
+#加载doubs数据
+data('doubs')
+
+#加载fish数据并移去没有鱼类数据的site 8
+fish<-doubs$fish
+fish<-fish[-8,]
+
+#加载fish数据并移去site 8
+env<- doubs$env
+env<-env[-8,]
+
+#不同鱼类物种频率分布可视化
+ab<- table(unlist(fish))
+barplot(ab,las=1,col=grey(5:0/5),
+        xlab="abundance fish",ylab="frequency")
+
+#哪一个站点有最多的物种
+site.pre<- rowSums(fish>0)
+barplot(site.pre,main="species richness",
+        xlab="Sites",ylab="Number of species",
+        col="grey",las=2)
+#第29个站点有最多的物种，有26种
+
+#哪一个物种分布的频率最广
+species.seq<-colSums( fish != 0)
+barplot(species.seq,main="species frequency",
+        xlab="species",ylab="Number of sites",
+        col="grey",las=2)
+#Lece分布的频率最广，在25个站点均有发现
+
+########################################################################################
+
+#对环境变量之间的相互关系可视化分析
+pairs(env,main="bivariate Plots of the environmental Data")
+
+#安装加载vegan包
+install.packages("vegan")
+library(vegan)
+
+#基于位点对环境变量进行聚类分析
+env.z.hel<-decostand(env,method="hellinger") #对环境变量进行标准化处理，消除变量之间量纲的影响
+env.z.dhel<- vegdist(env.z.hel,method = "euclidean") #计算欧式距离
+env.z.dhel.complete<-hclust(env.z.dhel,method = "complete")  #用完全链接聚类算法进行聚类分析
+plot(env.z.dhel.complete,hang=-1) #可视化
+
+#基于位点对鱼类物种进行聚类分析
+fish.hel<-decostand(fish,method="hellinger") #使用Hellinger距离方法对鱼类物种数进行标准化
+fish.dhel<- vegdist(fish.hel,method = "euclidean") #计算欧式距离
+fish.dhe1.complete<-hclust(fish.dhel,method = "complete") #用完全链接聚类算法进行聚类分析
+plot(fish.dhe1.complete,hang=-1) #可视化
+
+#不同鱼类物种的聚类分析
+fish.t<-t(fish) #物种丰度转置
+fish.chi.t<-decostand(fish.t,method="chi.square") #使用卡方距离方法对鱼类物种数进行标准化
+fish.chi.t.d<- vegdist(fish.chi.t,method = "euclidean") #计算欧式距离
+fish.chi.t.d.complete <- hclust(fish.chi.t.d,method = "complete") #用完全链接聚类算法进行聚类分析
+plot(fish.chi.t.d.complete,hang=-1) #可视化
+
+#################################################################################
+#PCA多元分析鱼类物种变量
+dca<-decorana(fish)
+dca
+fish.h.pca<-rda(fish.hel)
+ev<-fish.h.pca$CA$eig
+ev[ev>mean(ev)]
+n<-length(ev)
+barplot(ev,main="Eigenvalues",col="grey",las=2)
+abline(h=mean(ev),col="red2",lwd = 2)
+legend("topright","average egienvalue",
+       lwd = 2,col = "red2",bty = "n")
+biplot(fish.h.pca)
+
+#PCA多元分析环境变量
+env.z<-decostand(env,method = "standardize")
+env.pca<-rda(env.z)
+ev<-env.pca$CA$eig
+ev[ev>mean(ev)]
+n<-length(ev)
+barplot(ev,main="Eigenvalues",col="grey",las=2)
+abline(h=mean(ev),col="red2",lwd = 2)
+legend("topright","average egienvalue",
+       lwd = 2,col = "red2",bty = "n")
+biplot(env.pca)
+
+#RDA多元分析物种和环境因子的关系
+fish.h.pca.env<-rda(fish.hel,env.z) #fish.hel是响应变量，env.z是解释变量
+
+plot(fish.h.pca.env,scaling=1)
+plot(fish.h.pca.env,scaling=2)
+
+#分析RDA图可知：ph与鱼类物种相关程度最小，flo,dfs,har,nit,pho,amm,bdo对所有鱼类物种影响较大
